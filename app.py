@@ -1,7 +1,10 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import random
+import os
 
 app = Flask(__name__)
+CORS(app)
 
 cupons_validos = {
     "ABC123": True,
@@ -22,9 +25,14 @@ def jogar():
     else:
         return jsonify({"message": "Cupom inválido ou já utilizado!"})
 
-if __name__ == '__main__':
-    import os
+# Rota de teste para GET (navegador)
+@app.route('/api/testar', methods=['GET'])
+def testar():
+    return jsonify({"message": "Backend do Slot Machine está funcionando!"})
 
-port = int(os.environ.get("PORT", 5000))  # Render define a porta automaticamente
+@app.route('/')
+def home():
+    return "Slot Machine Backend está rodando!"
+
+port = int(os.environ.get("PORT", 5000))
 app.run(host='0.0.0.0', port=port)
-
