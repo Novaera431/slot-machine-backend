@@ -6,7 +6,9 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-DATABASE_URL = "postgresql://slot_machine_db_user:SGOF9BzWYw7uuWuErLHaIHkegFi0Glb1@dpg-cts27njqf0us73dnvnk0-a/slot_machine_db"
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL não configurado")
 
 def connect_db():
     return psycopg2.connect(DATABASE_URL, sslmode='require')
@@ -25,6 +27,7 @@ def init_db():
                 slot3 TEXT
             )
         ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cupom ON jogadas(cupom);')
         conn.commit()
 
 init_db()
@@ -41,15 +44,17 @@ def verificar_cupom():
     try:
         with connect_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM jogadas WHERE cupom = %s', (cupom,))
+            cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
             resultado = cursor.fetchone()
 
             if resultado:
                 return jsonify({'error': 'Cupom já utilizado!'}), 400
 
         return jsonify({'message': 'Cupom válido!'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except psycopg2.Error as e:
+        return jsonify({'error': 'Erro interno no banco de dados'}), 500
+    except Exception:
+        return jsonify({'error': 'Erro desconhecido'}), 500
 
 @app.route('/api/jogar', methods=['POST'])
 def jogar():
@@ -71,9 +76,12 @@ def jogar():
             conn.commit()
 
         return jsonify({'message': 'Jogada registrada com sucesso!'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except psycopg2.Error as e:
+        return jsonify({'error': 'Erro interno no banco de dados'}), 500
+    except Exception:
+        return jsonify({'error': 'Erro desconhecido'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
