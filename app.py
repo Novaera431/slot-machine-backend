@@ -4,6 +4,7 @@ import psycopg2
 import jwt
 import datetime
 from functools import wraps
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -148,6 +149,8 @@ def verificar_cupom():
     
     return jsonify({'message': 'Cupom válido'}), 200
 
-# Inicialização do servidor
+# Inicialização do servidor Flask
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))  # Usa a variável de ambiente PORT (Render) ou 5000 por padrão
+    app.run(host='0.0.0.0', port=port)
+
