@@ -1,103 +1,153 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import psycopg2
-import os
-import random
+import jwt
+import datetime
+from functools import wraps
 
 app = Flask(__name__)
 CORS(app)
 
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if not DATABASE_URL:
-    raise Exception("DATABASE_URL não configurado")
+# Configurações do banco de dados
+DB_CONFIG = {
+    'dbname': 'slot_machine',
+    'user': 'postgres',
+    'password': 'senha123',
+    'host': 'localhost'
+}
 
-def connect_db():
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+# Chave secreta para JWT (use uma chave segura e única)
+SECRET_KEY = 'chave_super_secreta_para_jwt'
 
-# Inicializa o banco de dados
-def init_db():
-    with connect_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS jogadas (
-                id SERIAL PRIMARY KEY,
-                cupom TEXT UNIQUE,
-                valor REAL,
-                slot1 TEXT,
-                slot2 TEXT,
-                slot3 TEXT
-            )
-        ''')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_cupom ON jogadas(cupom);')
-        conn.commit()
+# Conexão com o banco de dados
+def conectar_db():
+    return psycopg2.connect(**DB_CONFIG)
 
-init_db()
+# Função para gerar token JWT
+def gerar_token(cupom, valor):
+    payload = {
+        'cupom': cupom,
+        'valor': valor,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)  # Token expira em 5 minutos
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
-# Sorteio de frutas no backend
+# Middleware para verificar o token JWT nas requisições
+def verificar_token(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+        
+        if not token:
+            return jsonify({'error': 'Token ausente!'}), 401
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            request.cupom = data['cupom']
+            request.valor = data['valor']
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token expirado!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Token inválido!'}), 401
+
+        return f(*args, **kwargs)
+    return decorated
+
+# Rota para gerar token
+@app.route('/api/token', methods=['POST'])
+def gerar_token_endpoint():
+    dados = request.get_json()
+    cupom = dados.get('cupom')
+    valor = dados.get('valor')
+
+    if not cupom or not valor:
+        return jsonify({'error': 'Dados incompletos'}), 400
+    
+    token = gerar_token(cupom, valor)
+    return jsonify({'token': token})
+
+# Função para sortear as frutas aleatoriamente
 def sortear_frutas():
+    import random
     frutas = ["🍇", "🍉", "🍒", "🍍", "🍓", "🍋", "🍈", "🥝"]
-    pesos = [1, 2, 3, 4, 5, 6, 7, 8]  # Probabilidades ponderadas
-    return random.choices(frutas, weights=pesos, k=3)  # Sorteia 3 frutas
+    return [random.choice(frutas) for _ in range(3)]
 
-# Verifica se o cupom já foi utilizado
-@app.route('/api/verificar-cupom', methods=['POST'])
-def verificar_cupom():
-    data = request.json
-    cupom = data.get('cupom')
+# Função para calcular o prêmio
+def calcular_premio(frutas):
+    if frutas[0] == frutas[1] == frutas[2]:
+        premios = {
+            "🍇": 1000,
+            "🍉": 500,
+            "🍒": 300,
+            "🍍": 200,
+            "🍓": 100,
+            "🍋": 50,
+            "🍈": 20,
+            "🥝": 10
+        }
+        return premios.get(frutas[0], 0)
+    return 0
 
-    if not cupom:
-        return jsonify({'error': 'Cupom não informado'}), 400
-
-    try:
-        with connect_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
-            resultado = cursor.fetchone()
-
-            if resultado:
-                return jsonify({'error': 'O cupom só pode ser usado uma vez'}), 400
-
-        return jsonify({'message': 'Cupom válido!'}), 200
-    except psycopg2.Error as e:
-        return jsonify({'error': 'Erro interno no banco de dados'}), 500
-    except Exception:
-        return jsonify({'error': 'Erro desconhecido'}), 500
-
-# Realiza a jogada sorteando as frutas no backend
+# Rota protegida para jogar (verifica o token)
 @app.route('/api/jogar', methods=['POST'])
+@verificar_token
 def jogar():
-    data = request.json
-    cupom = data.get('cupom')
-    valor = data.get('valor')
+    cupom = request.cupom
+    valor = request.valor
 
     if not cupom or not valor:
         return jsonify({'error': 'Dados incompletos'}), 400
 
+    conn = conectar_db()
+    cursor = conn.cursor()
+
     try:
-        with connect_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
-            resultado = cursor.fetchone()
-            
-            # Se o cupom já existir, retorna erro específico
-            if resultado:
-                return jsonify({'error': 'O cupom só pode ser usado uma vez'}), 400
+        # Verifica se o cupom já foi utilizado
+        cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
+        if cursor.fetchone():
+            return jsonify({'error': 'O cupom só pode ser usado uma vez'}), 400
 
-            frutas = sortear_frutas()
+        # Realiza o sorteio das frutas
+        frutas = sortear_frutas()
+        premio = calcular_premio(frutas)
 
-            cursor.execute('''
-                INSERT INTO jogadas (cupom, valor, slot1, slot2, slot3)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (cupom, valor, frutas[0], frutas[1], frutas[2]))
-            conn.commit()
+        # Registra a jogada no banco de dados
+        cursor.execute(
+            'INSERT INTO jogadas (cupom, valor, frutas) VALUES (%s, %s, %s)',
+            (cupom, valor, ''.join(frutas))
+        )
+        conn.commit()
 
-        return jsonify({
-            'message': 'Jogada registrada com sucesso!',
-            'frutas': frutas
-        }), 200
-    except psycopg2.Error:
-        return jsonify({'error': 'Erro interno no banco de dados'}), 500
+        return jsonify({'frutas': frutas, 'premio': premio})
 
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': 'Erro interno no servidor'}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# Rota para verificar cupons
+@app.route('/api/verificar-cupom', methods=['POST'])
+def verificar_cupom():
+    dados = request.get_json()
+    cupom = dados.get('cupom')
+
+    if not cupom:
+        return jsonify({'error': 'Cupom não informado'}), 400
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
+    if cursor.fetchone():
+        return jsonify({'error': 'Cupom já utilizado'}), 400
+    
+    return jsonify({'message': 'Cupom válido'}), 200
+
+# Inicialização do servidor
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
