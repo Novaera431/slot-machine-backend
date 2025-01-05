@@ -132,7 +132,7 @@ def jogar():
 
     except Exception as e:
         conn.rollback()
-        logger.error(f"Erro interno no servidor: {str(e)}")  # Força o erro nos logs
+        logger.error(f"Erro interno no servidor: {str(e)}")
         return jsonify({'error': 'Erro interno no servidor', 'detalhes': str(e)}), 500
 
     finally:
@@ -140,14 +140,14 @@ def jogar():
         conn.close()
 
 
-# Rota para verificar se o cupom já foi utilizado
-@app.route('/api/verificar-cupom', methods=['POST'])
-def verificar_cupom():
+# Rota para verificar se o cupom já foi utilizado no popup
+@app.route('/api/validar-cupom-popup', methods=['POST'])
+def validar_cupom_popup():
     dados = request.get_json()
     cupom = dados.get('cupom')
 
     if not cupom:
-        return jsonify({'error': 'Cupom não informado'}), 400
+        return jsonify({'valido': False, 'error': 'Cupom não informado'}), 400
 
     conn = conectar_db()
     cursor = conn.cursor()
@@ -155,13 +155,13 @@ def verificar_cupom():
     try:
         cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
         if cursor.fetchone():
-            return jsonify({'error': 'Cupom já utilizado'}), 400
+            return jsonify({'valido': False, 'error': 'Cupom já utilizado'}), 400
         
-        return jsonify({'message': 'Cupom válido'}), 200
+        return jsonify({'valido': True}), 200
     
     except Exception as e:
         logger.error(f"Erro ao verificar cupom: {str(e)}")
-        return jsonify({'error': 'Erro ao verificar o cupom'}), 500
+        return jsonify({'valido': False, 'error': 'Erro ao verificar o cupom'}), 500
 
     finally:
         cursor.close()
