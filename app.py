@@ -1,6 +1,6 @@
+import psycopg2
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import psycopg2
 import jwt
 import datetime
 from functools import wraps
@@ -9,31 +9,25 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Configurações do banco de dados
-DB_CONFIG = {
-    'dbname': 'slot_machine',
-    'user': 'postgres',
-    'password': 'senha123',
-    'host': 'localhost'
-}
+# Conexão com o banco de dados usando a URL fornecida
+DATABASE_URL = "postgresql://slot_machine_db_user:SGOF9BzWYw7uuWuErLHaIHkegFi0Glb1@dpg-cts27njqf0us73dnvnk0-a/slot_machine_db"
 
-# Chave secreta para JWT (use uma chave segura e única)
+def conectar_db():
+    return psycopg2.connect(DATABASE_URL)
+
+# Chave JWT para segurança
 SECRET_KEY = 'chave_super_secreta_para_jwt'
 
-# Conexão com o banco de dados
-def conectar_db():
-    return psycopg2.connect(**DB_CONFIG)
-
-# Função para gerar token JWT
+# Geração de token JWT
 def gerar_token(cupom, valor):
     payload = {
         'cupom': cupom,
         'valor': valor,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)  # Token expira em 5 minutos
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
     }
     return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
-# Middleware para verificar o token JWT nas requisições
+# Middleware para verificar token JWT
 def verificar_token(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -56,7 +50,7 @@ def verificar_token(f):
         return f(*args, **kwargs)
     return decorated
 
-# Rota para gerar token
+# Geração do token de acesso
 @app.route('/api/token', methods=['POST'])
 def gerar_token_endpoint():
     dados = request.get_json()
@@ -69,13 +63,13 @@ def gerar_token_endpoint():
     token = gerar_token(cupom, valor)
     return jsonify({'token': token})
 
-# Função para sortear as frutas aleatoriamente
+# Sorteio de frutas (máquina slot)
 def sortear_frutas():
     import random
     frutas = ["🍇", "🍉", "🍒", "🍍", "🍓", "🍋", "🍈", "🥝"]
     return [random.choice(frutas) for _ in range(3)]
 
-# Função para calcular o prêmio
+# Cálculo do prêmio
 def calcular_premio(frutas):
     if frutas[0] == frutas[1] == frutas[2]:
         premios = {
@@ -91,7 +85,7 @@ def calcular_premio(frutas):
         return premios.get(frutas[0], 0)
     return 0
 
-# Rota protegida para jogar (verifica o token)
+# Rota para jogar (protegida com token)
 @app.route('/api/jogar', methods=['POST'])
 @verificar_token
 def jogar():
@@ -125,6 +119,7 @@ def jogar():
 
     except Exception as e:
         conn.rollback()
+        print(str(e))
         return jsonify({'error': 'Erro interno no servidor'}), 500
 
     finally:
@@ -149,8 +144,7 @@ def verificar_cupom():
     
     return jsonify({'message': 'Cupom válido'}), 200
 
-# Inicialização do servidor Flask
+# Inicialização do Flask na porta correta
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Usa a variável de ambiente PORT (Render) ou 5000 por padrão
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
