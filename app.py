@@ -5,9 +5,14 @@ import jwt
 import datetime
 from functools import wraps
 import os
+import logging
 
 app = Flask(__name__)
 CORS(app)
+
+# Configuração de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # URL de conexão com o banco de dados PostgreSQL
 DATABASE_URL = "postgresql://slot_machine_db_user:SGOF9BzWYw7uuWuErLHaIHkegFi0Glb1@dpg-cts27njqf0us73dnvnk0-a/slot_machine_db"
@@ -127,7 +132,7 @@ def jogar():
 
     except Exception as e:
         conn.rollback()
-        print(f"Erro ao executar jogada: {str(e)}")  # Log do erro detalhado
+        logger.error(f"Erro interno no servidor: {str(e)}")  # Força o erro nos logs
         return jsonify({'error': 'Erro interno no servidor', 'detalhes': str(e)}), 500
 
     finally:
@@ -155,7 +160,7 @@ def verificar_cupom():
         return jsonify({'message': 'Cupom válido'}), 200
     
     except Exception as e:
-        print(f"Erro ao verificar cupom: {str(e)}")
+        logger.error(f"Erro ao verificar cupom: {str(e)}")
         return jsonify({'error': 'Erro ao verificar o cupom'}), 500
 
     finally:
