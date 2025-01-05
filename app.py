@@ -55,7 +55,7 @@ def verificar_cupom():
             resultado = cursor.fetchone()
 
             if resultado:
-                return jsonify({'error': 'Cupom já utilizado!'}), 400
+                return jsonify({'error': 'O cupom só pode ser usado uma vez'}), 400
 
         return jsonify({'message': 'Cupom válido!'}), 200
     except psycopg2.Error as e:
@@ -74,10 +74,17 @@ def jogar():
         return jsonify({'error': 'Dados incompletos'}), 400
 
     try:
-        frutas = sortear_frutas()  # Sorteia as frutas no backend
-
         with connect_db() as conn:
             cursor = conn.cursor()
+            cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
+            resultado = cursor.fetchone()
+            
+            # Se o cupom já existir, retorna erro específico
+            if resultado:
+                return jsonify({'error': 'O cupom só pode ser usado uma vez'}), 400
+
+            frutas = sortear_frutas()
+
             cursor.execute('''
                 INSERT INTO jogadas (cupom, valor, slot1, slot2, slot3)
                 VALUES (%s, %s, %s, %s, %s)
@@ -86,15 +93,11 @@ def jogar():
 
         return jsonify({
             'message': 'Jogada registrada com sucesso!',
-            'frutas': frutas  # Retorna as frutas sorteadas para o frontend
+            'frutas': frutas
         }), 200
-    except psycopg2.Error as e:
+    except psycopg2.Error:
         return jsonify({'error': 'Erro interno no banco de dados'}), 500
-    except Exception:
-        return jsonify({'error': 'Erro desconhecido'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-
-
