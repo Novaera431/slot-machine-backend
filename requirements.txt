@@ -2,3 +2,4 @@ Flask==3.0.0
 flask_cors==4.0.0
 psycopg2==2.9.6
 pyjwt==2.8.0
+twilio==8.0.0
