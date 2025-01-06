@@ -138,12 +138,16 @@ def jogar():
 
         # Atualiza o número de jogadas restantes na tabela cupons
         cursor.execute(
-            'UPDATE cupons SET jogadas_disponiveis = jogadas_disponiveis - 1 WHERE cupom = %s',
+            'UPDATE cupons SET jogadas_disponiveis = jogadas_disponiveis - 1 WHERE cupom = %s RETURNING jogadas_disponiveis',
             (cupom,)
         )
+        jogadas_restantes = cursor.fetchone()[0]  # Captura o novo valor após o decremento
+
+        # Commit da transação após as atualizações
         conn.commit()
 
-        return jsonify({'frutas': frutas, 'premio': premio})
+        # Retorna as frutas sorteadas, prêmio e jogadas restantes para o frontend
+        return jsonify({'frutas': frutas, 'premio': premio, 'jogadas_restantes': jogadas_restantes})
 
     except Exception as e:
         conn.rollback()
