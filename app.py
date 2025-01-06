@@ -112,24 +112,33 @@ def jogar():
     cursor = conn.cursor()
 
     try:
-        # Verifica quantas jogadas restam
-        cursor.execute('SELECT jogadas_restantes FROM jogadas WHERE cupom = %s', (cupom,))
+        # Verifica se o cupom tem jogadas disponíveis na tabela cupons
+        cursor.execute('SELECT jogadas_disponiveis FROM cupons WHERE cupom = %s', (cupom,))
         resultado = cursor.fetchone()
         
         if not resultado:
             return jsonify({'error': 'Cupom não encontrado'}), 400
         
-        jogadas_restantes = resultado[0]
-        if jogadas_restantes <= 0:
-            return jsonify({'error': 'Você já utilizou todas as jogadas com este cupom'}), 400
+        jogadas_disponiveis = resultado[0]
+        if jogadas_disponiveis <= 0:
+            return jsonify({'error': 'Você já utilizou todas as jogadas disponíveis com este cupom'}), 400
 
         # Realiza o sorteio das frutas
         frutas = sortear_frutas()
         premio = calcular_premio(frutas)
+        premio = premio if premio > 0 else 0  # Se não houver prêmio, registra 0
 
-        # Atualiza o número de jogadas restantes
+        logger.info(f"Frutas sorteadas: {''.join(frutas)} - Prêmio: R${premio}")
+
+        # Insere a jogada na tabela jogadas (registrando o histórico)
         cursor.execute(
-            'UPDATE jogadas SET jogadas_restantes = jogadas_restantes - 1 WHERE cupom = %s',
+            'INSERT INTO jogadas (cupom, frutas, premio) VALUES (%s, %s, %s)',
+            (cupom, ''.join(frutas), premio)
+        )
+
+        # Atualiza o número de jogadas restantes na tabela cupons
+        cursor.execute(
+            'UPDATE cupons SET jogadas_disponiveis = jogadas_disponiveis - 1 WHERE cupom = %s',
             (cupom,)
         )
         conn.commit()
@@ -149,7 +158,7 @@ def jogar():
 @app.route('/api/validar-cupom-popup', methods=['POST'])
 def validar_cupom_popup():
     dados = request.get_json()
-    logger.info(f"Dados recebidos: {dados}")  # Adiciona log para verificar o que está sendo recebido
+    logger.info(f"Dados recebidos: {dados}")  # Log para verificar o que está sendo recebido
     cupom = dados.get('cupom')
     valor = dados.get('valor')  # Novo campo de valor
 
@@ -160,33 +169,36 @@ def validar_cupom_popup():
     cursor = conn.cursor()
 
     try:
-        # Verifica se o cupom já foi utilizado
-        cursor.execute('SELECT jogadas_restantes FROM jogadas WHERE cupom = %s', (cupom,))
+        # Verifica se o cupom já existe na tabela cupons
+        cursor.execute('SELECT jogadas_disponiveis FROM cupons WHERE cupom = %s', (cupom,))
         resultado = cursor.fetchone()
+        
+        # Se o cupom já existe
         if resultado:
-            jogadas_restantes = resultado[0]
-            if jogadas_restantes > 0:
-                return jsonify({'valido': True, 'jogadas': jogadas_restantes}), 200
+            jogadas_disponiveis = resultado[0]
+            if jogadas_disponiveis > 0:
+                return jsonify({'valido': True, 'jogadas': jogadas_disponiveis}), 200
             else:
                 return jsonify({'valido': False, 'error': 'Cupom já utilizado por completo'}), 400
 
-        # Se o cupom não foi usado, calcula o número de jogadas
+        # Se o cupom não existe, calcula o número de jogadas com base no valor
         valor = float(valor)
         jogadas = int(valor // 50)  # Cada R$50 dá direito a uma jogada
 
         if jogadas == 0:
             return jsonify({'valido': False, 'error': 'Valor insuficiente para jogar'}), 400
         
-        # Registra o cupom e as jogadas disponíveis no banco
+        # Insere o cupom na tabela cupons com o total de jogadas
         cursor.execute(
-            'INSERT INTO jogadas (cupom, valor, jogadas_restantes) VALUES (%s, %s, %s)',
-            (cupom, valor, jogadas)
+            'INSERT INTO cupons (cupom, valor, jogadas_disponiveis, total_jogadas) VALUES (%s, %s, %s, %s)',
+            (cupom, valor, jogadas, jogadas)
         )
         conn.commit()
 
         return jsonify({'valido': True, 'jogadas': jogadas}), 200
 
     except Exception as e:
+        conn.rollback()
         logger.error(f"Erro ao validar cupom: {str(e)}")
         return jsonify({'valido': False, 'error': 'Erro ao validar o cupom'}), 500
 
