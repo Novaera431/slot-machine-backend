@@ -149,7 +149,7 @@ def jogar():
 @app.route('/api/validar-cupom-popup', methods=['POST'])
 def validar_cupom_popup():
     dados = request.get_json()
-     logger.info(f"Dados recebidos: {dados}")  # Adiciona log para verificar o que está sendo recebido
+    logger.info(f"Dados recebidos: {dados}")  # Adiciona log para verificar o que está sendo recebido
     cupom = dados.get('cupom')
     valor = dados.get('valor')  # Novo campo de valor
 
