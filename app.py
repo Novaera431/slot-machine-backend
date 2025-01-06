@@ -112,19 +112,25 @@ def jogar():
     cursor = conn.cursor()
 
     try:
-        # Verifica se o cupom já foi utilizado
-        cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
-        if cursor.fetchone():
-            return jsonify({'error': 'O cupom só pode ser usado uma vez'}), 400
+        # Verifica quantas jogadas restam
+        cursor.execute('SELECT jogadas_restantes FROM jogadas WHERE cupom = %s', (cupom,))
+        resultado = cursor.fetchone()
+        
+        if not resultado:
+            return jsonify({'error': 'Cupom não encontrado'}), 400
+        
+        jogadas_restantes = resultado[0]
+        if jogadas_restantes <= 0:
+            return jsonify({'error': 'Você já utilizou todas as jogadas com este cupom'}), 400
 
         # Realiza o sorteio das frutas
         frutas = sortear_frutas()
         premio = calcular_premio(frutas)
 
-        # Registra a jogada no banco de dados
+        # Atualiza o número de jogadas restantes
         cursor.execute(
-            'INSERT INTO jogadas (cupom, valor, frutas) VALUES (%s, %s, %s)',
-            (cupom, valor, ''.join(frutas))
+            'UPDATE jogadas SET jogadas_restantes = jogadas_restantes - 1 WHERE cupom = %s',
+            (cupom,)
         )
         conn.commit()
 
@@ -139,29 +145,49 @@ def jogar():
         cursor.close()
         conn.close()
 
-
 # Rota para verificar se o cupom já foi utilizado no popup
 @app.route('/api/validar-cupom-popup', methods=['POST'])
 def validar_cupom_popup():
     dados = request.get_json()
     cupom = dados.get('cupom')
+    valor = dados.get('valor')  # Novo campo de valor
 
-    if not cupom:
-        return jsonify({'valido': False, 'error': 'Cupom não informado'}), 400
+    if not cupom or not valor:
+        return jsonify({'valido': False, 'error': 'Cupom ou valor não informado'}), 400
 
     conn = conectar_db()
     cursor = conn.cursor()
 
     try:
-        cursor.execute('SELECT 1 FROM jogadas WHERE cupom = %s', (cupom,))
-        if cursor.fetchone():
-            return jsonify({'valido': False, 'error': 'Cupom já utilizado'}), 400
+        # Verifica se o cupom já foi utilizado
+        cursor.execute('SELECT jogadas_restantes FROM jogadas WHERE cupom = %s', (cupom,))
+        resultado = cursor.fetchone()
+        if resultado:
+            jogadas_restantes = resultado[0]
+            if jogadas_restantes > 0:
+                return jsonify({'valido': True, 'jogadas': jogadas_restantes}), 200
+            else:
+                return jsonify({'valido': False, 'error': 'Cupom já utilizado por completo'}), 400
+
+        # Se o cupom não foi usado, calcula o número de jogadas
+        valor = float(valor)
+        jogadas = int(valor // 50)  # Cada R$50 dá direito a uma jogada
+
+        if jogadas == 0:
+            return jsonify({'valido': False, 'error': 'Valor insuficiente para jogar'}), 400
         
-        return jsonify({'valido': True}), 200
-    
+        # Registra o cupom e as jogadas disponíveis no banco
+        cursor.execute(
+            'INSERT INTO jogadas (cupom, valor, jogadas_restantes) VALUES (%s, %s, %s)',
+            (cupom, valor, jogadas)
+        )
+        conn.commit()
+
+        return jsonify({'valido': True, 'jogadas': jogadas}), 200
+
     except Exception as e:
-        logger.error(f"Erro ao verificar cupom: {str(e)}")
-        return jsonify({'valido': False, 'error': 'Erro ao verificar o cupom'}), 500
+        logger.error(f"Erro ao validar cupom: {str(e)}")
+        return jsonify({'valido': False, 'error': 'Erro ao validar o cupom'}), 500
 
     finally:
         cursor.close()
