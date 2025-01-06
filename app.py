@@ -132,9 +132,9 @@ def enviar_premio():
 
     try:
         message = client.messages.create(
-            from_=TWILIO_PHONE_NUMBER,
+            from_=f'whatsapp:{TWILIO_PHONE_NUMBER}',
             body=mensagem,
-            to=MEU_WHATSAPP
+            to=f'whatsapp:{MEU_WHATSAPP}'
         )
         return jsonify({'message': 'Mensagem enviada com sucesso!', 'sid': message.sid}), 200
     except Exception as e:
