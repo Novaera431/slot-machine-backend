@@ -18,38 +18,6 @@ MEU_WHATSAPP = os.getenv('MEU_WHATSAPP')
 # Inicialização do cliente Twilio
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-# Rota para enviar prêmio via WhatsApp
-@app.route('/enviar-premio', methods=['POST'])
-def enviar_premio():
-    dados = request.get_json()
-    nome = dados.get('nome')
-    telefone = dados.get('telefone')
-    cupom = dados.get('cupom')
-    valor = dados.get('valor')
-    premio = dados.get('premio')
-    fruta = dados.get('fruta')
-
-    mensagem = (
-        f"📩 Novo Ganhador!\n"
-        f"Nome: {nome}\n"
-        f"Telefone: {telefone}\n"
-        f"Cupom Fiscal: {cupom}\n"
-        f"Valor da Compra: R${valor}\n"
-        f"Prêmio: R${premio}\n"
-        f"Fruta: {fruta}"
-    )
-
-    try:
-        message = client.messages.create(
-            from_=TWILIO_PHONE_NUMBER,
-            body=mensagem,
-            to=MEU_WHATSAPP
-        )
-        return jsonify({'message': 'Mensagem enviada com sucesso!', 'sid': message.sid}), 200
-    except Exception as e:
-        logger.error(f"Erro ao enviar mensagem pelo Twilio: {str(e)}")
-        return jsonify({'error': 'Erro ao enviar mensagem via WhatsApp', 'detalhes': str(e)}), 500
-
 
 app = Flask(__name__)
 CORS(app)
@@ -140,6 +108,38 @@ def calcular_premio(frutas):
         }
         return premios.get(frutas[0], 0)
     return 0
+
+# Rota para enviar prêmio via WhatsApp
+@app.route('/enviar-premio', methods=['POST'])
+def enviar_premio():
+    dados = request.get_json()
+    nome = dados.get('nome')
+    telefone = dados.get('telefone')
+    cupom = dados.get('cupom')
+    valor = dados.get('valor')
+    premio = dados.get('premio')
+    fruta = dados.get('fruta')
+
+    mensagem = (
+        f"📩 Novo Ganhador!\n"
+        f"Nome: {nome}\n"
+        f"Telefone: {telefone}\n"
+        f"Cupom Fiscal: {cupom}\n"
+        f"Valor da Compra: R${valor}\n"
+        f"Prêmio: R${premio}\n"
+        f"Fruta: {fruta}"
+    )
+
+    try:
+        message = client.messages.create(
+            from_=TWILIO_PHONE_NUMBER,
+            body=mensagem,
+            to=MEU_WHATSAPP
+        )
+        return jsonify({'message': 'Mensagem enviada com sucesso!', 'sid': message.sid}), 200
+    except Exception as e:
+        logger.error(f"Erro ao enviar mensagem pelo Twilio: {str(e)}")
+        return jsonify({'error': 'Erro ao enviar mensagem via WhatsApp', 'detalhes': str(e)}), 500
 
 
 # Rota protegida para realizar a jogada
