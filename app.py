@@ -89,8 +89,32 @@ def gerar_token_endpoint():
 # Função para sortear frutas aleatoriamente
 def sortear_frutas():
     import random
-    frutas = ["🍇", "🍉", "🍒", "🍍", "🍓", "🍋", "🍈", "🥝"]
-    return [random.choice(frutas) for _ in range(3)]
+    
+    # Lista ponderada de frutas e prêmios
+    frutas_ponderadas = {
+        "🍇": 1,  # Uva
+        "🍉": 2,  # Melancia
+        "🍒": 3,  # Cereja
+        "🍍": 4,  # Abacaxi
+        "🍓": 5,  # Morango
+        "🍋": 6,  # Limão
+        "🍈": 7,  # Melão
+        "🥝": 8   # Kiwi
+    }
+    
+    # Criar lista ponderada dentro da função
+    def criar_lista_ponderada():
+        lista = []
+        for fruta, quantidade in frutas_ponderadas.items():
+            lista.extend([fruta] * quantidade)  # Adiciona a fruta conforme o peso
+        return lista
+    
+    # Criar a lista ponderada
+    lista_ponderada = criar_lista_ponderada()
+    
+    # Sortear 3 frutas com base na lista ponderada
+    return random.choices(lista_ponderada, k=3)
+
 
 
 # Função para calcular prêmio com base nas frutas
